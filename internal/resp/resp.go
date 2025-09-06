@@ -181,3 +181,113 @@ func Deserilize(rd io.Reader) (*Value, error) {
 		return nil, fmt.Errorf("unknown resp type: %c", respType)
 	}
 }
+
+func serializeSimpleString(v *Value) string {
+	return "+" + v.String + "\r\n"
+}
+
+func serializeError(v *Value) string {
+	return "-" + v.String + "\r\n"
+}
+
+func serializeInteger(v *Value) string {
+	return ":" + strconv.Itoa(int(v.Integer)) + "\r\n"
+}
+
+func serializeBulkString(v *Value) string {
+	if v.IsNull {
+		return "$-1\r\n"
+	}
+	return "$" + strconv.Itoa(len(v.String)) + "\r\n" + v.String + "\r\n"
+}
+
+func serializeArray(v *Value) (string, error) {
+	if v.IsNull {
+		return "*-1\r\n", nil
+	}
+
+	var serialized string
+	for _, el := range v.Array {
+		s, err := Serialize(el)
+		if err != nil {
+			return "", fmt.Errorf("serializing error element: %w", err)
+		}
+		serialized += s
+	}
+
+	return "*" + strconv.Itoa(len(v.Array)) + "\r\n" + serialized, nil
+}
+
+func Serialize(v *Value) (string, error) {
+	if v == nil {
+		return "", errors.New("value is nil")
+	}
+
+	switch v.Type {
+	case SimpleString:
+		return serializeSimpleString(v), nil
+	case Error:
+		return serializeError(v), nil
+	case Integer:
+		return serializeInteger(v), nil
+	case BulkString:
+		return serializeBulkString(v), nil
+	case Array:
+		return serializeArray(v)
+	default:
+		return "", fmt.Errorf("invalid resp type: %v", v.Type)
+	}
+}
+
+// NewError creates a new error resp value.
+func NewError(msg string) *Value {
+	return &Value{
+		Type:   Error,
+		String: msg,
+	}
+}
+
+// NewSimpleString creates a new simple string resp value.
+func NewSimpleString(msg string) *Value {
+	return &Value{
+		Type:   SimpleString,
+		String: msg,
+	}
+}
+
+func NewBulkString(msg string) *Value {
+	// If string is empty, we want to return a null bulk string
+	if msg == "" {
+		return &Value{
+			Type:   BulkString,
+			IsNull: true,
+		}
+	}
+	return &Value{
+		Type:   BulkString,
+		String: msg,
+	}
+}
+
+// NewInteger creates a new integer resp value.
+func NewInteger(num int64) *Value {
+	return &Value{
+		Type:    Integer,
+		Integer: num,
+	}
+}
+
+// NewArray creates a new array resp value.
+func NewArray(vals ...*Value) *Value {
+	// If no values, return a null array
+	if len(vals) == 0 {
+		return &Value{
+			Type:   Array,
+			IsNull: true,
+		}
+	}
+	return &Value{
+		Type:  Array,
+		Array: vals,
+	}
+}

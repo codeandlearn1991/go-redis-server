@@ -126,3 +126,105 @@ func TestDeserialize(t *testing.T) {
 		}
 	}
 }
+
+func TestSerialize(t *testing.T) {
+	serializeTestCases := []struct {
+		name               string
+		value              *resp.Value
+		expectedSerialized string
+		expectedErr        string
+	}{
+		{
+			name: "simple string value",
+			value: &resp.Value{
+				Type:   resp.SimpleString,
+				String: "OK",
+			},
+			expectedSerialized: "+OK\r\n",
+		},
+		{
+			name: "integer value",
+			value: &resp.Value{
+				Type:    resp.Integer,
+				Integer: 123,
+			},
+			expectedSerialized: ":123\r\n",
+		},
+		{
+			name: "bulk string value",
+			value: &resp.Value{
+				Type:   resp.BulkString,
+				String: "hello",
+			},
+			expectedSerialized: "$5\r\nhello\r\n",
+		},
+		{
+			name: "array value",
+			value: &resp.Value{
+				Type: resp.Array,
+				Array: []*resp.Value{
+					{Type: resp.Integer, Integer: 123},
+					{Type: resp.SimpleString, String: "OK"},
+				},
+			},
+			expectedSerialized: "*2\r\n:123\r\n+OK\r\n",
+		},
+		{
+			name: "error value",
+			value: &resp.Value{
+				Type:   resp.Error,
+				String: "ERR invalid command",
+			},
+			expectedSerialized: "-ERR invalid command\r\n",
+		},
+		{
+			name: "nil bulk string value",
+			value: &resp.Value{
+				Type:   resp.BulkString,
+				IsNull: true,
+			},
+			expectedSerialized: "$-1\r\n",
+		},
+		{
+			name: "nil value array element",
+			value: &resp.Value{
+				Type: resp.Array,
+				Array: []*resp.Value{
+					{Type: resp.BulkString, IsNull: true},
+				},
+			},
+			expectedSerialized: "*1\r\n$-1\r\n",
+		},
+		{
+			name: "invalid type value",
+			value: &resp.Value{
+				Type: 99,
+			},
+			expectedErr: "invalid resp type",
+		},
+		{
+			name: "invalid type array element",
+			value: &resp.Value{
+				Type: resp.Array,
+				Array: []*resp.Value{
+					{Type: 99},
+				},
+			},
+			expectedErr: "invalid resp type",
+		},
+	}
+
+	for _, tc := range serializeTestCases {
+		t.Run(tc.name, func(t *testing.T) {
+			encoded, err := resp.Serialize(tc.value)
+
+			if tc.expectedErr != "" {
+				assert.Error(t, err)
+				assert.ErrorContains(t, err, tc.expectedErr)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tc.expectedSerialized, encoded)
+			}
+		})
+	}
+}
