@@ -2,13 +2,13 @@ package main
 
 import (
 	"context"
-	"errors"
 	"flag"
 	"fmt"
-	"io"
 	"log/slog"
 	"net"
 	"os"
+
+	"github.com/codeandlearn1991/go-redis-server/internal/connections"
 )
 
 func main() {
@@ -40,6 +40,8 @@ func listen(logger *slog.Logger, port string) error {
 		}
 	}()
 
+	handler := connections.NewHandler(logger)
+
 	// Infinite for loop to listen for incoming connections.
 	for {
 		conn, err := listener.Accept()
@@ -49,39 +51,6 @@ func listen(logger *slog.Logger, port string) error {
 
 		// Handle connections in a goroutine, allowing us to accept
 		// multiple connections to work with.
-		go handleConn(ctx, logger, conn)
-	}
-}
-
-func handleConn(ctx context.Context, logger *slog.Logger, conn net.Conn) {
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		default:
-			buffer := make([]byte, 1024)
-			n, err := conn.Read(buffer)
-			if errors.Is(err, io.EOF) {
-				return
-			}
-
-			if err != nil {
-				logger.Error(
-					"connection from",
-					slog.String("addr", conn.RemoteAddr().String()),
-					slog.Any("err", err))
-				return
-			}
-
-			message := string(buffer[:n])
-			logger.Info("message from client", slog.String("message", message))
-
-			response := []byte("Hello from the server")
-			_, err = conn.Write(response)
-			if err != nil {
-				logger.Error("responding to client", slog.Any("err", err))
-				return
-			}
-		}
+		go handler.Handle(ctx, conn)
 	}
 }
